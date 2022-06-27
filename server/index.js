@@ -109,6 +109,19 @@ server.get("/messages", async (req, res) => {
     }
 });
 
+server.post("/status", async (req, res) => {
+    const user = req.headers.user;
+    const findUser = await db.collection("users").findOne({name: user});
+    if (!findUser) {
+        res.status(404).send("Usuário não encontrado.");
+        return;
+    }
+    db.collection("users").updateOne({name: user}, {
+        $set: { lastStatus: Date.now()}
+    });
+    res.status(200).send("Status atualizado com sucesso!");
+})
+
 server.listen(5000, () => {
     console.log("Servidor rodando na porta 5000");
 });
