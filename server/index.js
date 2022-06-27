@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 import joi from 'joi';
 import dayjs from 'dayjs';
@@ -28,8 +28,10 @@ const messageSchema = joi.object({
 })
 
 setInterval(async () => {
-    const users = await db.collection("users").find({}).toArray();
     const now = Date.now();
+
+    const users = await db.collection("users").find({}).toArray();
+    
     for (let i = 0 ; i < users.length ; i++) {
         if (now - users[i].lastStatus >= 10000) {
             db.collection("users").deleteOne({name: users[i].name});
@@ -78,12 +80,14 @@ server.post("/participants", async (req, res) => {
 });
 server.get("/participants", async (req, res) => {
     const users = await db.collection("users").find({}).toArray();
+
     res.send(users);
 });
 
 server.post("/messages", async (req, res) => {
     const message = req.body;
     const from = req.headers.user;
+
     const validation = messageSchema.validate(message, {abortEarly: true});
 
     if (validation.error) {
@@ -119,13 +123,34 @@ server.get("/messages", async (req, res) => {
 
     const limit = req.query.limit;
     const user = req.headers.user;
+
     const messages = await db.collection("messages").find({}).toArray();
+
     if (limit) {
         res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)));
     } else {
         res.status(200).send(messages.filter((m) => filterMessages(m)));
     }
 });
+server.delete("/messages/:id", async (req, res) => {
+    const user = req.headers.user;
+    const id = req.params.id;
+
+    const message = await db.collection("messages").findOne({_id: new ObjectId(id)});
+    
+    if (!message) {
+        res.status(404).send("Mensagem não encontrada.");
+        return;
+    }
+    
+    if (user !== message.from) {
+        res.status(401).send("Você não é o dono dessa mensagem. Não pode removê-la");
+        return;
+    }
+
+    db.collection("messages").deleteOne({_id: new ObjectId(id)});
+    res.status(200).send("Deletada com sucesso!");
+})
 
 server.post("/status", async (req, res) => {
     const user = req.headers.user;
