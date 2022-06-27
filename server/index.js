@@ -51,7 +51,7 @@ server.post("/participants", async (req, res) => {
             to: "Todos",
             text: "entra na sala...",
             type: "status",
-            time: dayjs().format("HH:MM:SS")
+            time: dayjs().format("HH:MM:ss")
         });
         res.status(201).send("Usuário cadastrado com sucesso!");
     } catch {
@@ -85,11 +85,27 @@ server.post("/messages", async (req, res) => {
             to: message.to,
             text: message.text,
             type: message.type,
-            time: dayjs().format("HH:MM:SS")
+            time: dayjs().format("HH:MM:ss")
         });
         res.status(201).send("Mensagem enviada!");
     } catch {
         res.status("500").send("deu ruim :(");
+    }
+});
+server.get("/messages", async (req, res) => {
+    function filterMessages(mes) {
+        if (mes.type !== "private_message") return true;
+        else if (mes.from === user || mes.to === user) return true;
+        else return false;
+    }
+
+    const limit = req.query.limit;
+    const user = req.headers.user;
+    const messages = await db.collection("messages").find({}).toArray();
+    if (limit) {
+        res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)));
+    } else {
+        res.status(200).send(messages.filter((m) => filterMessages(m)));
     }
 });
 
