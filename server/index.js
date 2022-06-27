@@ -30,19 +30,23 @@ const messageSchema = joi.object({
 setInterval(async () => {
     const now = Date.now();
 
-    const users = await db.collection("users").find({}).toArray();
+    try {
+        const users = await db.collection("users").find({}).toArray();
     
-    for (let i = 0 ; i < users.length ; i++) {
-        if (now - users[i].lastStatus >= 10000) {
-            db.collection("users").deleteOne({name: users[i].name});
-            db.collection("messages").insertOne({
-                from: users[i].name,
-                to: "Todos",
-                text: "sai da sala...",
-                type: "status",
-                time: dayjs().format("HH:MM:ss")
-            });
+        for (let i = 0 ; i < users.length ; i++) {
+            if (now - users[i].lastStatus >= 10000) {
+                db.collection("users").deleteOne({name: users[i].name});
+                db.collection("messages").insertOne({
+                    from: users[i].name,
+                    to: "Todos",
+                    text: "sai da sala...",
+                    type: "status",
+                    time: dayjs().format("HH:MM:ss")
+                });
+            }
         }
+    } catch {
+        console.log("Não foi possível atualizar a lista de usuários. Tentando novamente em 15s");
     }
 }, 15000);
 
@@ -55,19 +59,18 @@ server.post("/participants", async (req, res) => {
         return;
     }
 
-    const findUser = await db.collection("users").findOne(user);
-    if (findUser) {
-        res.status(409).send("Usuário já cadastrado!");
-        return;
-    }
-
     try {
+        const findUser = await db.collection("users").findOne(user);
+        if (findUser) {
+            res.status(409).send("Usuário já cadastrado!");
+            return;
+        }
         db.collection("users").insertOne({
             name: stripHtml(user.name.trim()).result,
             lastStatus: Date.now()
         });
         db.collection("messages").insertOne({
-            from: stripHtml(user.name.trim()).result,
+            from: stripHtml(user.name).result,
             to: "Todos",
             text: "entra na sala...",
             type: "status",
@@ -96,6 +99,7 @@ server.post("/messages", async (req, res) => {
     }
 
     const findUser = await db.collection("users").findOne({name: from});
+
     if (!findUser) {
         res.status(422).send("Remetente não encontrado!");
         return;
@@ -124,45 +128,100 @@ server.get("/messages", async (req, res) => {
     const limit = req.query.limit;
     const user = req.headers.user;
 
-    const messages = await db.collection("messages").find({}).toArray();
+    try {
+        const messages = await db.collection("messages").find({}).toArray();
 
-    if (limit) {
-        res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)));
-    } else {
-        res.status(200).send(messages.filter((m) => filterMessages(m)));
+        if (limit) {
+            res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)));
+        } else {
+            res.status(200).send(messages.filter((m) => filterMessages(m)));
+        }
+    } catch {
+        res.status(500).send("deu ruim :(");
     }
 });
 server.delete("/messages/:id", async (req, res) => {
     const user = req.headers.user;
     const id = req.params.id;
 
-    const message = await db.collection("messages").findOne({_id: new ObjectId(id)});
+    try {
+        const findMessage = await db.collection("messages").findOne({_id: new ObjectId(id)});
     
-    if (!message) {
-        res.status(404).send("Mensagem não encontrada.");
-        return;
+        if (!findMessage) {
+            res.status(404).send("Mensagem não encontrada.");
+            return;
+        }
+        
+        if (user !== message.from) {
+            res.status(401).send("Você não é o dono dessa mensagem. Não pode removê-la");
+            return;
+        }
+    
+        db.collection("messages").deleteOne({_id: new ObjectId(id)});
+        res.status(200).send("Deletada com sucesso!");
+    } catch {
+        res.status(500).send("deu ruim :(");
     }
-    
-    if (user !== message.from) {
-        res.status(401).send("Você não é o dono dessa mensagem. Não pode removê-la");
+});
+server.put("/messages/:id", async (req, res) => {
+    const from = req.headers.user;
+    const message = req.body;
+    const id = req.params.id;
+
+    const validation = messageSchema.validate(message, {abortEarly: true});
+
+    if (validation.error) {
+        res.status(422).send(validation.error.details);
         return;
     }
 
-    db.collection("messages").deleteOne({_id: new ObjectId(id)});
-    res.status(200).send("Deletada com sucesso!");
-})
+    try {
+        const findUser = await db.collection("users").findOne({name: from});
+    
+        if (!findUser) {
+            res.status(422).send("Remetente não encontrado!");
+            return;
+        }
+
+        const findMessage = await db.collection("messages").findOne({_id: new ObjectId(id)});
+
+        if (!findMessage) {
+            res.status(404).send("Mensagem não encontrada.");
+            return;
+        }
+
+        db.collection("messages").updateOne({_id: new ObjectId(id)}, {
+            $set: {
+                from,
+                to: message.to.trim,
+                text: stripHtml(message.text).result,
+                type: message.type.trim,
+                time: dayjs().format("HH:MM:ss")
+            }
+        });
+        res.status(200).send("Mensagem atualizada!");
+    } catch {
+        res.status(500).send("deu ruim :(");
+    }
+});
 
 server.post("/status", async (req, res) => {
     const user = req.headers.user;
-    const findUser = await db.collection("users").findOne({name: user});
-    if (!findUser) {
-        res.status(404).send("Usuário não encontrado.");
-        return;
+
+    try {
+        const findUser = await db.collection("users").findOne({name: user});
+
+        if (!findUser) {
+            res.status(404).send("Usuário não encontrado.");
+            return;
+        }
+        db.collection("users").updateOne({name: user}, {
+            $set: { lastStatus: Date.now()}
+        });
+        res.status(200).send("Status atualizado com sucesso!");
+    } catch {
+        res.status(500).send("deu ruim :(");
     }
-    db.collection("users").updateOne({name: user}, {
-        $set: { lastStatus: Date.now()}
-    });
-    res.status(200).send("Status atualizado com sucesso!");
 })
 
 server.listen(5000, () => {
