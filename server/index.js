@@ -4,6 +4,7 @@ import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import joi from 'joi';
 import dayjs from 'dayjs';
+import { stripHtml } from 'string-strip-html';
 
 const server = express();
 server.use([cors(), express.json()]);
@@ -60,11 +61,11 @@ server.post("/participants", async (req, res) => {
 
     try {
         db.collection("users").insertOne({
-            name: user.name,
+            name: stripHtml(user.name.trim()).result,
             lastStatus: Date.now()
         });
         db.collection("messages").insertOne({
-            from: user.name,
+            from: stripHtml(user.name.trim()).result,
             to: "Todos",
             text: "entra na sala...",
             type: "status",
@@ -99,9 +100,9 @@ server.post("/messages", async (req, res) => {
     try {
         db.collection("messages").insertOne({
             from,
-            to: message.to,
-            text: message.text,
-            type: message.type,
+            to: message.to.trim(),
+            text: stripHtml(message.text).result,
+            type: message.type.trim(),
             time: dayjs().format("HH:MM:ss")
         });
         res.status(201).send("Mensagem enviada!");
