@@ -20,12 +20,17 @@ mongoClient.connect().then(() => {
 const userSchema = joi.object({
     name: joi.string().required()
 });
+const messageSchema = joi.object({
+    to: joi.string().required(),
+    text: joi.string().required(),
+    type: joi.valid('message', 'private_message')
+})
 
 server.post("/participants", async (req, res) => {
     const user = req.body;
-    const now = dayjs().format("HH:MM:SS")
+
     const validation = userSchema.validate(user, {abortEarly: true});
-    if (!validation) {
+    if (validation.error) {
         res.status(422).send(validation.error.details);
         return;
     }
@@ -46,16 +51,46 @@ server.post("/participants", async (req, res) => {
             to: "Todos",
             text: "entra na sala...",
             type: "status",
-            time: now
+            time: dayjs().format("HH:MM:SS")
         });
         res.status(201).send("Usuário cadastrado com sucesso!");
     } catch {
-        res.status(500).send("deu ruim :(");
+        res.status(500).send("Deu ruim :(");
     }
 });
 server.get("/participants", async (req, res) => {
     const users = await db.collection("users").find({}).toArray();
     res.send(users);
+});
+
+server.post("/messages", async (req, res) => {
+    const message = req.body;
+    const from = req.headers.user;
+    const validation = messageSchema.validate(message, {abortEarly: true});
+
+    if (validation.error) {
+        res.status(422).send(validation.error.details);
+        return;
+    }
+
+    const findUser = await db.collection("users").findOne({name: from});
+    if (!findUser) {
+        res.status(422).send("Remetente não encontrado!");
+        return;
+    }
+
+    try {
+        db.collection("messages").insertOne({
+            from,
+            to: message.to,
+            text: message.text,
+            type: message.type,
+            time: dayjs().format("HH:MM:SS")
+        });
+        res.status(201).send("Mensagem enviada!");
+    } catch {
+        res.status("500").send("deu ruim :(");
+    }
 });
 
 server.listen(5000, () => {
