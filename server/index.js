@@ -132,9 +132,9 @@ server.get("/messages", async (req, res) => {
         const messages = await db.collection("messages").find({}).toArray();
 
         if (limit) {
-            res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)));
+            res.status(200).send(messages.slice(-limit).filter((m) => filterMessages(m)).reverse());
         } else {
-            res.status(200).send(messages.filter((m) => filterMessages(m)));
+            res.status(200).send(messages.filter((m) => filterMessages(m)).reverse());
         }
     } catch {
         res.status(500).send("deu ruim :(");
