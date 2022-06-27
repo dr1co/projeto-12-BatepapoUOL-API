@@ -48,10 +48,14 @@ server.post("/participants", async (req, res) => {
             type: "status",
             time: now
         });
-        res.status(201).send("Entrando na sala...");
+        res.status(201).send("Usuário cadastrado com sucesso!");
     } catch {
         res.status(500).send("deu ruim :(");
     }
+});
+server.get("/participants", async (req, res) => {
+    const users = await db.collection("users").find({}).toArray();
+    res.send(users);
 });
 
 server.listen(5000, () => {
